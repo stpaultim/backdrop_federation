@@ -4,5 +4,6 @@
     "actor_name": "site",
     "actor_display_name": "",
     "actor_summary": "",
-    "content_types": []
+    "content_types": [],
+    "field_mapping": {}
 }

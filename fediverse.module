@@ -47,6 +47,15 @@ function fediverse_menu() {
     'file' => 'fediverse.admin.inc',
   );
 
+  // Followers list page.
+  $items['admin/config/services/fediverse/followers'] = array(
+    'title' => 'Fediverse followers',
+    'page callback' => 'fediverse_admin_followers_page',
+    'access arguments' => array('administer fediverse'),
+    'file' => 'fediverse.admin.inc',
+    'type' => MENU_CALLBACK,
+  );
+
   // WebFinger endpoint.
   $items['.well-known/webfinger'] = array(
     'page callback' => 'fediverse_webfinger_endpoint',
@@ -105,6 +114,16 @@ function fediverse_menu() {
     'file' => 'fediverse.pages.inc',
     'type' => MENU_CALLBACK,
     'delivery callback' => 'fediverse_deliver_activitypub',
+  );
+
+  // Subscribe page (remote follow form).
+  $items['fediverse/subscribe'] = array(
+    'title' => 'Follow on Fediverse',
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('fediverse_subscribe_form'),
+    'access callback' => TRUE,
+    'file' => 'fediverse.pages.inc',
+    'type' => MENU_CALLBACK,
   );
 
   return $items;
@@ -191,6 +210,34 @@ function fediverse_deliver_activity_worker($data) {
   if ($result === FALSE) {
     watchdog('fediverse', 'Failed to deliver activity to @inbox', array('@inbox' => $data['inbox_uri']), WATCHDOG_WARNING);
   }
+}
+
+/**
+ * Implements hook_node_view().
+ */
+function fediverse_node_view(Node $node, $view_mode, $langcode) {
+  if ($view_mode !== 'full') {
+    return;
+  }
+
+  if (!config_get('fediverse.settings', 'enabled')) {
+    return;
+  }
+
+  if (!_fediverse_type_enabled($node->type)) {
+    return;
+  }
+
+  $node->content['links']['fediverse'] = array(
+    '#theme' => 'links__node__fediverse',
+    '#links' => array(
+      'fediverse-subscribe' => array(
+        'title' => t('Follow on Fediverse'),
+        'href' => 'fediverse/subscribe',
+      ),
+    ),
+    '#attributes' => array('class' => array('links', 'inline')),
+  );
 }
 
 /**

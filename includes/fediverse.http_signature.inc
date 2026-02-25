@@ -102,6 +102,20 @@ function fediverse_verify_signature() {
     return FALSE;
   }
 
+  // Replay protection: reject requests whose Date header is outside ±5 minutes.
+  $date_header = isset($_SERVER['HTTP_DATE']) ? $_SERVER['HTTP_DATE'] : '';
+  if (empty($date_header)) {
+    watchdog('fediverse', 'Missing Date header in signed request.', array(), WATCHDOG_WARNING);
+    return FALSE;
+  }
+  $request_time = strtotime($date_header);
+  if ($request_time === FALSE || abs(REQUEST_TIME - $request_time) > 300) {
+    watchdog('fediverse', 'Request Date header is too old, too far in the future, or invalid: @date', array(
+      '@date' => $date_header,
+    ), WATCHDOG_WARNING);
+    return FALSE;
+  }
+
   // Fetch the public key.
   $public_key = _fediverse_fetch_public_key($params['keyId']);
   if (!$public_key) {

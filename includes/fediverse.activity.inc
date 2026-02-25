@@ -68,18 +68,22 @@ function _fediverse_build_object(Node $node) {
   // Articles and pages become Article, others become Note.
   $object_type = in_array($node->type, array('article', 'page')) ? 'Article' : 'Note';
 
+  // Get the configured text field for this content type, falling back to body.
+  $field_mapping = config_get('fediverse.settings', 'field_mapping');
+  $text_field = !empty($field_mapping[$node->type]) ? $field_mapping[$node->type] : 'body';
+
   // Get the body content.
   $body = '';
-  if (!empty($node->body[LANGUAGE_NONE][0]['value'])) {
-    $body = $node->body[LANGUAGE_NONE][0]['value'];
-    $format = isset($node->body[LANGUAGE_NONE][0]['format']) ? $node->body[LANGUAGE_NONE][0]['format'] : NULL;
+  if (!empty($node->{$text_field}[LANGUAGE_NONE][0]['value'])) {
+    $body = $node->{$text_field}[LANGUAGE_NONE][0]['value'];
+    $format = isset($node->{$text_field}[LANGUAGE_NONE][0]['format']) ? $node->{$text_field}[LANGUAGE_NONE][0]['format'] : NULL;
     $body = check_markup($body, $format);
   }
 
   // Build summary from teaser or truncate body.
   $summary = '';
-  if (!empty($node->body[LANGUAGE_NONE][0]['summary'])) {
-    $summary = check_plain($node->body[LANGUAGE_NONE][0]['summary']);
+  if (!empty($node->{$text_field}[LANGUAGE_NONE][0]['summary'])) {
+    $summary = check_plain($node->{$text_field}[LANGUAGE_NONE][0]['summary']);
   }
   elseif (strlen(strip_tags($body)) > 500) {
     $summary = truncate_utf8(strip_tags($body), 500, TRUE, TRUE);
@@ -128,24 +132,39 @@ function _fediverse_build_object(Node $node) {
 function _fediverse_get_node_images(Node $node) {
   $images = array();
 
-  // Check common image field names.
-  $image_fields = array('field_image', 'field_images', 'field_photo', 'field_photos');
-
-  foreach ($image_fields as $field_name) {
-    if (isset($node->{$field_name}[LANGUAGE_NONE])) {
-      foreach ($node->{$field_name}[LANGUAGE_NONE] as $item) {
-        if (!empty($item['uri'])) {
-          $image = array(
-            'type' => 'Image',
-            'mediaType' => isset($item['filemime']) ? $item['filemime'] : 'image/jpeg',
-            'url' => file_create_url($item['uri']),
-          );
-          if (!empty($item['alt'])) {
-            $image['name'] = $item['alt'];
-          }
-          $images[] = $image;
-        }
+  // Find all image fields on this content type dynamically.
+  $instances = field_info_instances('node', $node->type);
+  foreach ($instances as $field_name => $instance) {
+    $field = field_info_field($field_name);
+    if ($field['type'] !== 'image') {
+      continue;
+    }
+    if (empty($node->{$field_name}[LANGUAGE_NONE])) {
+      continue;
+    }
+    foreach ($node->{$field_name}[LANGUAGE_NONE] as $item) {
+      if (empty($item['fid'])) {
+        continue;
       }
+      // uri/filemime may not be set on the node object at hook_node_insert time;
+      // fall back to loading the managed file record directly.
+      if (empty($item['uri'])) {
+        $file = file_load($item['fid']);
+        if (!$file) {
+          continue;
+        }
+        $item['uri'] = $file->uri;
+        $item['filemime'] = $file->filemime;
+      }
+      $image = array(
+        'type' => 'Image',
+        'mediaType' => isset($item['filemime']) ? $item['filemime'] : 'image/jpeg',
+        'url' => file_create_url($item['uri']),
+      );
+      if (!empty($item['alt'])) {
+        $image['name'] = $item['alt'];
+      }
+      $images[] = $image;
     }
   }
 

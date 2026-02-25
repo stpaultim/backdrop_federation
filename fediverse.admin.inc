@@ -76,6 +76,34 @@ function fediverse_admin_settings_form($form, &$form_state) {
     '#default_value' => $config->get('content_types') ?: array(),
   );
 
+  // Per-content-type field mapping.
+  $field_mapping = $config->get('field_mapping') ?: array();
+
+  $form['content']['field_mapping'] = array(
+    '#type' => 'container',
+    '#tree' => TRUE,
+  );
+
+  foreach ($node_types as $type => $name) {
+    $text_fields = _fediverse_get_text_fields($type);
+    if (empty($text_fields)) {
+      continue;
+    }
+    $default = isset($field_mapping[$type]) ? $field_mapping[$type] : (isset($text_fields['body']) ? 'body' : key($text_fields));
+    $form['content']['field_mapping'][$type] = array(
+      '#type' => 'select',
+      '#title' => t('Content field for %type', array('%type' => $name)),
+      '#description' => t('Field used as the post body when federating this content type.'),
+      '#options' => $text_fields,
+      '#default_value' => $default,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="content_types[' . $type . ']"]' => array('checked' => TRUE),
+        ),
+      ),
+    );
+  }
+
   // Status information.
   $form['status'] = array(
     '#type' => 'fieldset',
@@ -89,10 +117,14 @@ function fediverse_admin_settings_form($form, &$form_state) {
     ->execute()
     ->fetchField();
 
+  $follower_link = l(
+    format_plural($follower_count, '1 follower', '@count followers'),
+    'admin/config/services/fediverse/followers'
+  );
   $form['status']['follower_count'] = array(
     '#type' => 'item',
     '#title' => t('Followers'),
-    '#markup' => format_plural($follower_count, '1 follower', '@count followers'),
+    '#markup' => $follower_link,
   );
 
   // Keypair status.
@@ -120,6 +152,30 @@ function fediverse_admin_settings_form($form, &$form_state) {
     )),
   );
 
+  // Maintenance.
+  $form['maintenance'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Maintenance'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+
+  $outbox_count = db_select('fediverse_outbox', 'o')
+    ->countQuery()
+    ->execute()
+    ->fetchField();
+
+  $form['maintenance']['redeliver_description'] = array(
+    '#markup' => '<p>' . t('Re-queue all posts in the outbox for delivery to current followers. Useful if posts were published before any followers existed. Run cron after clicking to process the queue.') . '</p>',
+  );
+
+  $form['maintenance']['redeliver'] = array(
+    '#type' => 'submit',
+    '#value' => t('Re-deliver all posts (@count)', array('@count' => $outbox_count)),
+    '#submit' => array('fediverse_admin_redeliver_submit'),
+    '#disabled' => ($outbox_count == 0 || $follower_count == 0),
+  );
+
   $form['actions']['#type'] = 'actions';
   $form['actions']['submit'] = array(
     '#type' => 'submit',
@@ -130,6 +186,27 @@ function fediverse_admin_settings_form($form, &$form_state) {
 }
 
 /**
+ * Get available text fields for a node type, suitable for use as body content.
+ *
+ * @param string $node_type
+ *   The node type machine name.
+ *
+ * @return array
+ *   Array of field_name => label for text fields on this content type.
+ */
+function _fediverse_get_text_fields($node_type) {
+  $text_types = array('text_with_summary', 'text_long', 'text');
+  $options = array();
+  foreach (field_info_instances('node', $node_type) as $field_name => $instance) {
+    $field = field_info_field($field_name);
+    if (in_array($field['type'], $text_types)) {
+      $options[$field_name] = $instance['label'];
+    }
+  }
+  return $options;
+}
+
+/**
  * Validation callback for actor name field.
  */
 function _fediverse_validate_actor_name($element, &$form_state) {
@@ -137,6 +214,53 @@ function _fediverse_validate_actor_name($element, &$form_state) {
   if (!empty($value) && !preg_match('/^[a-zA-Z0-9_]+$/', $value)) {
     form_error($element, t('Actor username may only contain letters, numbers, and underscores.'));
   }
+}
+
+/**
+ * Submit handler for the re-deliver button.
+ *
+ * Re-queues the most recent activity for each node to all current followers.
+ */
+function fediverse_admin_redeliver_submit($form, &$form_state) {
+  // Get unique inboxes from all current followers.
+  $followers = db_select('fediverse_followers', 'f')
+    ->fields('f', array('inbox_uri', 'shared_inbox_uri'))
+    ->execute();
+
+  $inboxes = array();
+  foreach ($followers as $follower) {
+    $inbox = !empty($follower->shared_inbox_uri) ? $follower->shared_inbox_uri : $follower->inbox_uri;
+    if (!in_array($inbox, $inboxes)) {
+      $inboxes[] = $inbox;
+    }
+  }
+
+  if (empty($inboxes)) {
+    backdrop_set_message(t('No followers to deliver to.'), 'warning');
+    return;
+  }
+
+  // Get the latest non-Delete activity ID for each node.
+  $result = db_query(
+    'SELECT MAX(id) AS id FROM {fediverse_outbox} WHERE activity_type != :delete GROUP BY nid',
+    array(':delete' => 'Delete')
+  );
+
+  $queue = BackdropQueue::get('fediverse_activity_delivery');
+  $queued = 0;
+
+  foreach ($result as $row) {
+    foreach ($inboxes as $inbox) {
+      $queue->createItem(array(
+        'activity_id' => $row->id,
+        'inbox_uri' => $inbox,
+      ));
+      $queued++;
+    }
+  }
+
+  watchdog('fediverse', 'Re-queued @count deliveries via admin.', array('@count' => $queued), WATCHDOG_INFO);
+  backdrop_set_message(t('Queued @count deliveries. Run cron to process them.', array('@count' => $queued)));
 }
 
 /**
@@ -154,7 +278,47 @@ function fediverse_admin_settings_form_submit($form, &$form_state) {
   $content_types = array_filter($form_state['values']['content_types']);
   $config->set('content_types', array_values($content_types));
 
+  // Save field mapping (preserve all types so selection survives disabling).
+  $config->set('field_mapping', $form_state['values']['field_mapping'] ?: array());
+
   $config->save();
 
   backdrop_set_message(t('Fediverse settings saved.'));
+}
+
+/**
+ * Admin page listing all fediverse followers.
+ */
+function fediverse_admin_followers_page() {
+  $follower_count = db_select('fediverse_followers', 'f')
+    ->countQuery()
+    ->execute()
+    ->fetchField();
+
+  $output = '<p>' . l(t('Back to Fediverse settings'), 'admin/config/services/fediverse') . '</p>';
+  $output .= '<p>' . format_plural($follower_count, '1 follower', '@count followers') . '</p>';
+
+  if ($follower_count == 0) {
+    $output .= '<p>' . t('No followers yet.') . '</p>';
+    return $output;
+  }
+
+  $followers = db_select('fediverse_followers', 'f')
+    ->fields('f', array('actor_uri', 'created'))
+    ->orderBy('created', 'DESC')
+    ->execute();
+
+  $header = array(t('Actor'), t('Followed'));
+  $rows = array();
+
+  foreach ($followers as $follower) {
+    $rows[] = array(
+      l($follower->actor_uri, $follower->actor_uri),
+      format_date($follower->created, 'short'),
+    );
+  }
+
+  $output .= theme('table', array('header' => $header, 'rows' => $rows));
+
+  return $output;
 }

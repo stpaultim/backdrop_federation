@@ -42,6 +42,7 @@ function fediverse_webfinger_endpoint() {
     backdrop_exit();
   }
 
+  global $base_url;
   $result = array(
     'subject' => $resource,
     'aliases' => array(
@@ -52,6 +53,10 @@ function fediverse_webfinger_endpoint() {
         'rel' => 'self',
         'type' => 'application/activity+json',
         'href' => fediverse_get_actor_uri(),
+      ),
+      array(
+        'rel' => 'http://ostatus.org/schema/1.0/subscribe',
+        'template' => $base_url . '/fediverse/subscribe?uri={uri}',
       ),
     ),
   );
@@ -150,10 +155,22 @@ function fediverse_actor_endpoint() {
   global $base_url;
   $actor_uri = fediverse_get_actor_uri();
 
+  // Get the actor's published date from when the keypair was first created.
+  $actor_created = db_select('fediverse_keypair', 'k')
+    ->fields('k', array('created'))
+    ->orderBy('created', 'ASC')
+    ->range(0, 1)
+    ->execute()
+    ->fetchField();
+
   $actor = array(
     '@context' => array(
       'https://www.w3.org/ns/activitystreams',
       'https://w3id.org/security/v1',
+      array(
+        'toot' => 'http://joinmastodon.org/ns#',
+        'discoverable' => 'toot:discoverable',
+      ),
     ),
     'id' => $actor_uri,
     'type' => 'Application',
@@ -161,9 +178,12 @@ function fediverse_actor_endpoint() {
     'name' => fediverse_get_actor_display_name(),
     'summary' => check_plain(fediverse_get_actor_summary()),
     'url' => $base_url,
+    'published' => $actor_created ? gmdate('c', $actor_created) : NULL,
     'inbox' => $base_url . '/fediverse/inbox',
     'outbox' => $base_url . '/fediverse/outbox',
     'followers' => $base_url . '/fediverse/followers',
+    'manuallyApprovesFollowers' => FALSE,
+    'discoverable' => TRUE,
     'publicKey' => array(
       'id' => $actor_uri . '#main-key',
       'owner' => $actor_uri,
@@ -387,6 +407,77 @@ function _fediverse_fetch_actor($actor_uri) {
   }
 
   return $data;
+}
+
+/**
+ * Subscribe form - allows fediverse users to follow this site.
+ */
+function fediverse_subscribe_form($form, &$form_state) {
+  global $base_url;
+  $actor_name = fediverse_get_actor_name();
+  $host = parse_url($base_url, PHP_URL_HOST);
+  $handle = '@' . $actor_name . '@' . $host;
+
+  $form['intro'] = array(
+    '#markup' => '<p>' . t('Enter your Fediverse address to follow %handle.', array('%handle' => $handle)) . '</p>',
+  );
+
+  // Pre-fill from ?uri= query param (OStatus remote follow flow).
+  // The uri may be in acct:user@domain or @user@domain format.
+  $default_address = '';
+  if (!empty($_GET['uri'])) {
+    $uri = check_plain($_GET['uri']);
+    // Strip acct: prefix if present.
+    if (strpos($uri, 'acct:') === 0) {
+      $uri = substr($uri, 5);
+    }
+    $default_address = $uri;
+  }
+
+  $form['fediverse_address'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Your Fediverse address'),
+    '#description' => t('For example: @user@mastodon.social'),
+    '#required' => TRUE,
+    '#attributes' => array('placeholder' => '@user@mastodon.social'),
+    '#default_value' => $default_address,
+    '#size' => 40,
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Follow'),
+  );
+
+  return $form;
+}
+
+/**
+ * Validation for the subscribe form.
+ */
+function fediverse_subscribe_form_validate($form, &$form_state) {
+  $address = trim($form_state['values']['fediverse_address']);
+  $address = ltrim($address, '@');
+
+  if (!preg_match('/^[^@\s]+@[^@\s]+\.[^@\s]+$/', $address)) {
+    form_set_error('fediverse_address', t('Please enter a valid Fediverse address (e.g., user@mastodon.social).'));
+  }
+}
+
+/**
+ * Submit handler for the subscribe form.
+ *
+ * Redirects to the user's fediverse instance to complete the follow.
+ */
+function fediverse_subscribe_form_submit($form, &$form_state) {
+  $address = ltrim(trim($form_state['values']['fediverse_address']), '@');
+  $parts = explode('@', $address, 2);
+  $domain = $parts[1];
+
+  $actor_uri = fediverse_get_actor_uri();
+  $redirect_url = 'https://' . $domain . '/authorize_follow?uri=' . urlencode($actor_uri);
+
+  backdrop_goto($redirect_url);
 }
 
 /**
