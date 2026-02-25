@@ -90,7 +90,7 @@ function fediverse_verify_signature() {
   $signature_header = isset($_SERVER['HTTP_SIGNATURE']) ? $_SERVER['HTTP_SIGNATURE'] : '';
 
   if (empty($signature_header)) {
-    watchdog('fediverse', 'No Signature header in request.', array(), WATCHDOG_DEBUG);
+    watchdog('fediverse', 'No Signature header in request.', array(), WATCHDOG_WARNING);
     return FALSE;
   }
 
@@ -147,7 +147,7 @@ function fediverse_verify_signature() {
     return TRUE;
   }
   elseif ($result === 0) {
-    watchdog('fediverse', 'Signature verification failed.', array(), WATCHDOG_DEBUG);
+    watchdog('fediverse', 'Signature verification failed.', array(), WATCHDOG_WARNING);
     return FALSE;
   }
   else {
