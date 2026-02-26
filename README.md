@@ -215,6 +215,11 @@ All endpoints are publicly accessible. The URL paths use `/fediverse/` regardles
 | `/fediverse/followers` | Followers collection |
 | `/fediverse/subscribe` | Remote follow form |
 
+## AI Statement
+
+AI tools were used in the creation of this module with human supervision and testing. 
+Please, use with caution and be sure to report any errors or suspicious code.
+
 Current Maintainer
 ------------------
 Tim Erickson (@stpaultim)
