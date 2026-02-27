@@ -64,9 +64,9 @@ function _backdrop_federation_build_object(Node $node) {
   $actor_uri = backdrop_federation_get_actor_uri();
   $node_url = url('node/' . $node->nid, array('absolute' => TRUE));
 
-  // Determine object type based on node type.
-  // Articles and pages become Article, others become Note.
-  $object_type = in_array($node->type, array('article', 'page')) ? 'Article' : 'Note';
+  // Determine object type from per-content-type config, defaulting to Note.
+  $object_type_mapping = config_get('backdrop_federation.settings', 'object_type_mapping') ?: array();
+  $object_type = isset($object_type_mapping[$node->type]) ? $object_type_mapping[$node->type] : 'Note';
 
   // Get the configured text field for this content type, falling back to body.
   $field_mapping = config_get('backdrop_federation.settings', 'field_mapping');

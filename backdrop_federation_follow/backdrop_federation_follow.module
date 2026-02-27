@@ -408,3 +408,221 @@ function _backdrop_federation_follow_resolve_handle($handle) {
 function _backdrop_federation_follow_strip_emoji($text) {
   return preg_replace('/[\x{10000}-\x{10FFFF}]/u', '', trim($text));
 }
+
+/**
+ * Implements hook_block_info().
+ */
+function backdrop_federation_follow_block_info() {
+  return array(
+    'fediverse_feed' => array(
+      'info' => t('Fediverse Following Feed'),
+      'description' => t('Displays recent posts from Fediverse accounts this site follows.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function backdrop_federation_follow_block_configure($delta = '', $settings = array()) {
+  $form = array();
+
+  if ($delta === 'fediverse_feed') {
+    $form['count'] = array(
+      '#type' => 'select',
+      '#title' => t('Number of posts to display'),
+      '#options' => array(
+        5  => 5,
+        10 => 10,
+        15 => 15,
+        20 => 20,
+        25 => 25,
+      ),
+      '#default_value' => isset($settings['count']) ? $settings['count'] : 10,
+    );
+
+    $form['show_avatars'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Show author avatars'),
+      '#default_value' => isset($settings['show_avatars']) ? $settings['show_avatars'] : 1,
+    );
+
+    $form['truncate_length'] = array(
+      '#type' => 'select',
+      '#title' => t('Truncate post content at'),
+      '#options' => array(
+        0   => t('No truncation (full content)'),
+        140 => t('140 characters'),
+        280 => t('280 characters'),
+        500 => t('500 characters'),
+      ),
+      '#default_value' => isset($settings['truncate_length']) ? $settings['truncate_length'] : 280,
+    );
+
+    $size_options = array(
+      100 => t('100 px'),
+      150 => t('150 px'),
+      200 => t('200 px'),
+      300 => t('300 px'),
+      400 => t('400 px'),
+    );
+
+    $form['max_image_width'] = array(
+      '#type' => 'select',
+      '#title' => t('Max image width'),
+      '#options' => $size_options,
+      '#default_value' => isset($settings['max_image_width']) ? $settings['max_image_width'] : 200,
+    );
+
+    $form['max_image_height'] = array(
+      '#type' => 'select',
+      '#title' => t('Max image height'),
+      '#options' => $size_options,
+      '#default_value' => isset($settings['max_image_height']) ? $settings['max_image_height'] : 200,
+    );
+  }
+
+  return $form;
+}
+
+/**
+ * Implements hook_block_save().
+ */
+function backdrop_federation_follow_block_save($delta = '', $edit = array()) {
+  if ($delta === 'fediverse_feed') {
+    return array(
+      'count'            => (int) $edit['count'],
+      'show_avatars'     => (int) $edit['show_avatars'],
+      'truncate_length'  => (int) $edit['truncate_length'],
+      'max_image_width'  => (int) $edit['max_image_width'],
+      'max_image_height' => (int) $edit['max_image_height'],
+    );
+  }
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function backdrop_federation_follow_block_view($delta = '', $settings = array(), $contexts = array()) {
+  if ($delta !== 'fediverse_feed') {
+    return array();
+  }
+
+  $count            = isset($settings['count'])            ? (int) $settings['count']            : 10;
+  $show_avatars     = isset($settings['show_avatars'])     ? (bool) $settings['show_avatars']    : TRUE;
+  $truncate_length  = isset($settings['truncate_length'])  ? (int) $settings['truncate_length']  : 280;
+  $max_image_width  = isset($settings['max_image_width'])  ? (int) $settings['max_image_width']  : 200;
+  $max_image_height = isset($settings['max_image_height']) ? (int) $settings['max_image_height'] : 200;
+
+  $rows = db_select('backdrop_federation_feed', 'f')
+    ->fields('f')
+    ->orderBy('published', 'DESC')
+    ->range(0, $count)
+    ->execute()
+    ->fetchAll();
+
+  if (empty($rows)) {
+    return array(
+      'subject' => t('Fediverse Feed'),
+      'content' => '<p>' . t('No posts yet.') . '</p>',
+    );
+  }
+
+  $output = '';
+
+  foreach ($rows as $row) {
+    $account = db_select('backdrop_federation_following', 'f')
+      ->fields('f', array('username', 'domain', 'display_name', 'avatar_url'))
+      ->condition('actor_uri', $row->actor_uri)
+      ->execute()
+      ->fetchObject();
+
+    $handle       = $account
+      ? ('@' . check_plain($account->username) . '@' . check_plain($account->domain))
+      : check_plain($row->actor_uri);
+    $display_name = $account ? check_plain($account->display_name) : check_plain($row->actor_uri);
+
+    $object       = json_decode($row->object_json, TRUE);
+    $original_url = isset($object['url']) ? $object['url'] : (isset($object['id']) ? $object['id'] : NULL);
+
+    // Optionally truncate post content.
+    $text = strip_tags($row->content);
+    if ($truncate_length > 0 && strlen($text) > $truncate_length) {
+      $text = check_plain(truncate_utf8($text, $truncate_length, TRUE, TRUE));
+    }
+    else {
+      $text = check_plain($text);
+    }
+
+    // Avatar.
+    $avatar_html = '';
+    if ($show_avatars && $account && !empty($account->avatar_url)) {
+      $avatar_html = '<img src="' . check_url($account->avatar_url) . '" alt=""'
+        . ' class="fediverse-feed-avatar">';
+    }
+
+    $output .= '<div class="fediverse-feed-post">';
+    $output .= '<p class="fediverse-feed-meta">'
+      . $avatar_html
+      . '<strong class="fediverse-feed-display-name">' . $display_name . '</strong>'
+      . ' <span class="fediverse-feed-handle">' . $handle . '</span>'
+      . ' <span class="fediverse-feed-date">&middot; ' . format_date($row->published, 'short') . '</span>';
+    if ($original_url) {
+      $output .= ' <span class="fediverse-feed-link">&middot; '
+        . l(t('View original'), $original_url, array('attributes' => array('target' => '_blank', 'rel' => 'noopener noreferrer')))
+        . '</span>';
+    }
+    $output .= '</p>';
+    $output .= '<div class="fediverse-feed-content">' . $text . '</div>';
+
+    // Render image attachments.
+    if (!empty($object['attachment']) && is_array($object['attachment'])) {
+      foreach ($object['attachment'] as $attachment) {
+        $url = isset($attachment['url']) ? $attachment['url'] : NULL;
+        if (!$url || !filter_var($url, FILTER_VALIDATE_URL)) {
+          continue;
+        }
+        $media_type = isset($attachment['mediaType']) ? $attachment['mediaType'] : '';
+        $is_image = (strpos($media_type, 'image/') === 0)
+          || (isset($attachment['type']) && $attachment['type'] === 'Image');
+        if ($is_image) {
+          $alt = isset($attachment['name']) ? check_plain($attachment['name']) : '';
+          $output .= '<img src="' . check_url($url) . '" alt="' . $alt . '"'
+            . ' class="fediverse-feed-image">';
+        }
+      }
+    }
+
+    $output .= '</div>';
+  }
+
+  if (user_access('administer backdrop_federation')) {
+    $output .= '<p class="fediverse-feed-all">'
+      . l(t('View all posts'), 'admin/config/services/fediverse/feed')
+      . '</p>';
+  }
+
+  $css = '
+    .fediverse-feed-post { border-bottom: 1px solid #ddd; padding: 0.75em 0; }
+    .fediverse-feed-post:last-of-type { border-bottom: none; }
+    .fediverse-feed-meta { margin: 0 0 0.4em; font-size: 0.9em; }
+    .fediverse-feed-avatar { width: 32px; height: 32px; border-radius: 50%; vertical-align: middle; margin-right: 0.4em; }
+    .fediverse-feed-handle { color: #666; }
+    .fediverse-feed-date { color: #666; }
+    .fediverse-feed-content { margin: 0; }
+    .fediverse-feed-image { max-width: ' . $max_image_width . 'px; max-height: ' . $max_image_height . 'px; width: auto; height: auto; display: block; margin-top: 0.5em; }
+    .fediverse-feed-all { margin-top: 0.75em; font-size: 0.9em; }
+  ';
+
+  return array(
+    'subject' => t('Fediverse Feed'),
+    'content' => array(
+      '#markup' => $output,
+      '#attached' => array(
+        'css' => array(
+          array('data' => $css, 'type' => 'inline'),
+        ),
+      ),
+    ),
+  );
+}

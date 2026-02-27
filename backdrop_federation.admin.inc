@@ -68,40 +68,63 @@ function backdrop_federation_admin_settings_form($form, &$form_state) {
   );
 
   $node_types = node_type_get_names();
-  $form['content']['content_types'] = array(
-    '#type' => 'checkboxes',
-    '#title' => t('Content types to federate'),
-    '#description' => t('Select which content types should be published to followers when created or updated.'),
-    '#options' => $node_types,
-    '#default_value' => $config->get('content_types') ?: array(),
+  $enabled_types = $config->get('content_types') ?: array();
+  $field_mapping = $config->get('field_mapping') ?: array();
+  $object_type_mapping = $config->get('object_type_mapping') ?: array();
+
+  $form['content']['type_label'] = array(
+    '#markup' => '<label>' . t('Content types to federate') . '</label>'
+      . '<div class="description">' . t('Select which content types should be published to followers when created or updated. Choose which field provides the post body for each enabled type.') . '</div>',
   );
 
-  // Per-content-type field mapping.
-  $field_mapping = $config->get('field_mapping') ?: array();
-
-  $form['content']['field_mapping'] = array(
+  // Per-type container — each content type gets its own checkbox and
+  // (conditionally visible) field mapping select directly beneath it.
+  $form['content']['per_type'] = array(
     '#type' => 'container',
     '#tree' => TRUE,
   );
 
   foreach ($node_types as $type => $name) {
-    $text_fields = _backdrop_federation_get_text_fields($type);
-    if (empty($text_fields)) {
-      continue;
-    }
-    $default = isset($field_mapping[$type]) ? $field_mapping[$type] : (isset($text_fields['body']) ? 'body' : key($text_fields));
-    $form['content']['field_mapping'][$type] = array(
-      '#type' => 'select',
-      '#title' => t('Content field for %type', array('%type' => $name)),
-      '#description' => t('Field used as the post body when federating this content type.'),
-      '#options' => $text_fields,
-      '#default_value' => $default,
-      '#states' => array(
-        'visible' => array(
-          ':input[name="content_types[' . $type . ']"]' => array('checked' => TRUE),
-        ),
+    $form['content']['per_type'][$type]['enabled'] = array(
+      '#type' => 'checkbox',
+      '#title' => check_plain($name),
+      '#default_value' => in_array($type, $enabled_types) ? 1 : 0,
+    );
+
+    $states_condition = array(
+      'visible' => array(
+        ':input[name="per_type[' . $type . '][enabled]"]' => array('checked' => TRUE),
       ),
     );
+
+    $form['content']['per_type'][$type]['object_type'] = array(
+      '#type' => 'select',
+      '#title' => t('Federate as'),
+      '#description' => t('<strong>Post (Note)</strong> — standard short-form Fediverse post, content only. <strong>Article</strong> — includes the node title; better for long-form content.'),
+      '#options' => array(
+        'Note'    => t('Post (Note)'),
+        'Article' => t('Article'),
+      ),
+      '#default_value' => isset($object_type_mapping[$type]) ? $object_type_mapping[$type] : 'Note',
+      '#prefix' => '<div style="margin-left:1.5em;">',
+      '#suffix' => '</div>',
+      '#states' => $states_condition,
+    );
+
+    $text_fields = _backdrop_federation_get_text_fields($type);
+    if (!empty($text_fields)) {
+      $default = isset($field_mapping[$type]) ? $field_mapping[$type] : (isset($text_fields['body']) ? 'body' : key($text_fields));
+      $form['content']['per_type'][$type]['field'] = array(
+        '#type' => 'select',
+        '#title' => t('Body field'),
+        '#description' => t('Field used as the post body when federating this content type.'),
+        '#options' => $text_fields,
+        '#default_value' => $default,
+        '#prefix' => '<div style="margin-left:1.5em;">',
+        '#suffix' => '</div>',
+        '#states' => $states_condition,
+      );
+    }
   }
 
   $form['content']['accept_replies'] = array(
@@ -308,12 +331,26 @@ function backdrop_federation_admin_settings_form_submit($form, &$form_state) {
   $config->set('actor_display_name', $form_state['values']['actor_display_name']);
   $config->set('actor_summary', $form_state['values']['actor_summary']);
 
-  // Filter out unchecked content types.
-  $content_types = array_filter($form_state['values']['content_types']);
-  $config->set('content_types', array_values($content_types));
-
-  // Save field mapping (preserve all types so selection survives disabling).
-  $config->set('field_mapping', $form_state['values']['field_mapping'] ?: array());
+  // Extract content types, field mapping, and object type mapping from the
+  // unified per-type structure.
+  $content_types = array();
+  $field_mapping = array();
+  $object_type_mapping = array();
+  foreach ($form_state['values']['per_type'] as $type => $values) {
+    if (!empty($values['enabled'])) {
+      $content_types[] = $type;
+    }
+    // Preserve field and object_type for all types so selections survive disabling.
+    if (isset($values['field'])) {
+      $field_mapping[$type] = $values['field'];
+    }
+    if (isset($values['object_type'])) {
+      $object_type_mapping[$type] = $values['object_type'];
+    }
+  }
+  $config->set('content_types', $content_types);
+  $config->set('field_mapping', $field_mapping);
+  $config->set('object_type_mapping', $object_type_mapping);
 
   $config->set('accept_replies', (bool) $form_state['values']['accept_replies']);
   $config->set('comment_moderation', (bool) $form_state['values']['comment_moderation']);
