@@ -320,6 +320,16 @@ function backdrop_federation_uninstall() {
   // Remove any pending items in the delivery queue.
   $queue = BackdropQueue::get('backdrop_federation_activity_delivery');
   $queue->deleteQueue();
+
+  // Release usage on the actor avatar file so cron can clean it up.
+  $fid = (int) config_get('backdrop_federation.settings', 'actor_avatar_fid');
+  if ($fid) {
+    $file = file_load($fid);
+    if ($file) {
+      file_usage_delete($file, 'backdrop_federation', 'actor', $fid);
+    }
+  }
+
   // DB tables (hook_schema) and config files are automatically removed by Backdrop.
 }
 

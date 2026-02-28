@@ -191,13 +191,44 @@ function backdrop_federation_actor_endpoint() {
     ),
   );
 
-  // Add icon if site has a logo.
-  $logo = theme_get_setting('logo');
-  if (!empty($logo)) {
+  // Add icon (avatar). Use the uploaded avatar file, falling back to the
+  // site logo if none has been configured.
+  $avatar_url = '';
+  $fid = (int) config_get('backdrop_federation.settings', 'actor_avatar_fid');
+  if ($fid) {
+    $file = file_load($fid);
+    if ($file) {
+      $avatar_url = file_create_url($file->uri);
+    }
+  }
+  if (empty($avatar_url)) {
+    $logo = theme_get_setting('logo');
+    if (!empty($logo)) {
+      if (strpos($logo, 'http://') === 0 || strpos($logo, 'https://') === 0) {
+        $avatar_url = $logo;
+      }
+      elseif (strpos($logo, '://') !== FALSE) {
+        $avatar_url = file_create_url($logo);
+      }
+      else {
+        $avatar_url = $base_url . '/' . ltrim($logo, '/');
+      }
+    }
+  }
+  if (!empty($avatar_url)) {
+    $ext = strtolower(pathinfo(parse_url($avatar_url, PHP_URL_PATH), PATHINFO_EXTENSION));
+    $media_types = array(
+      'jpg'  => 'image/jpeg',
+      'jpeg' => 'image/jpeg',
+      'png'  => 'image/png',
+      'gif'  => 'image/gif',
+      'webp' => 'image/webp',
+      'svg'  => 'image/svg+xml',
+    );
     $actor['icon'] = array(
       'type' => 'Image',
-      'mediaType' => 'image/png',
-      'url' => file_create_url($logo),
+      'mediaType' => isset($media_types[$ext]) ? $media_types[$ext] : 'image/jpeg',
+      'url' => $avatar_url,
     );
   }
 
