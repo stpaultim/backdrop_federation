@@ -60,6 +60,19 @@ function backdrop_federation_admin_settings_form($form, &$form_state) {
     '#rows' => 3,
   );
 
+  $form['actor']['actor_avatar_fid'] = array(
+    '#type' => 'managed_file',
+    '#title' => t('Avatar'),
+    '#description' => t('Profile picture shown in Fediverse clients (e.g. Mastodon). Square images work best; 400×400 px or larger is recommended. Falls back to the site logo if left empty.'),
+    '#default_value' => $config->get('actor_avatar_fid') ?: 0,
+    '#upload_location' => 'public://backdrop_federation/',
+    '#upload_validators' => array(
+      'file_validate_extensions' => array('png jpg jpeg gif webp'),
+      'file_validate_size' => array(2 * 1024 * 1024),
+    ),
+    '#browser_view' => 'image_library',
+  );
+
   // Content types.
   $form['content'] = array(
     '#type' => 'fieldset',
@@ -273,6 +286,7 @@ function _backdrop_federation_validate_actor_name($element, &$form_state) {
   }
 }
 
+
 /**
  * Submit handler for the re-deliver button.
  *
@@ -330,6 +344,26 @@ function backdrop_federation_admin_settings_form_submit($form, &$form_state) {
   $config->set('actor_name', $form_state['values']['actor_name']);
   $config->set('actor_display_name', $form_state['values']['actor_display_name']);
   $config->set('actor_summary', $form_state['values']['actor_summary']);
+
+  // Handle avatar file upload with usage tracking so the file is not
+  // treated as temporary and purged by cron.
+  $new_fid = !empty($form_state['values']['actor_avatar_fid']) ? (int) $form_state['values']['actor_avatar_fid'] : 0;
+  $old_fid = (int) $config->get('actor_avatar_fid');
+  if ($new_fid !== $old_fid) {
+    if ($new_fid) {
+      $file = file_load($new_fid);
+      if ($file) {
+        file_usage_add($file, 'backdrop_federation', 'actor', $new_fid);
+      }
+    }
+    if ($old_fid) {
+      $old_file = file_load($old_fid);
+      if ($old_file) {
+        file_usage_delete($old_file, 'backdrop_federation', 'actor', $old_fid);
+      }
+    }
+  }
+  $config->set('actor_avatar_fid', $new_fid);
 
   // Extract content types, field mapping, and object type mapping from the
   // unified per-type structure.

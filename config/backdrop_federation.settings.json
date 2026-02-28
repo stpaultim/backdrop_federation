@@ -4,6 +4,7 @@
     "actor_name": "site",
     "actor_display_name": "",
     "actor_summary": "",
+    "actor_avatar_fid": 0,
     "content_types": [],
     "field_mapping": {},
     "accept_replies": false,
