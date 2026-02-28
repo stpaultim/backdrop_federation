@@ -2,7 +2,7 @@
 
 Enables ActivityPub federation for Backdrop CMS, connecting your site to the Fediverse. Fediverse users can follow the site and receive posts in their feeds. Replies, likes, and boosts from the Fediverse are reflected back on the site.
 
-The core module implements an **outbound publisher** model: the site acts as an ActivityPub actor that broadcasts content to followers. An optional sub-module, **Backdrop Federation Follow**, extends this to two-way federation by allowing the site to follow remote accounts and receive their posts in a local feed.
+The core module implements an **outbound publisher** model: the site acts as an ActivityPub actor that broadcasts content to followers. An optional sub-module, **Backdrop Federation Follow**, extends this to two-way federation by allowing the site to follow remote accounts and receive their posts in a local feed. A "Fediverse Feed" block is available to display the incoming feed. 
 
 ---
 
@@ -194,6 +194,9 @@ The **Backdrop Federation Follow** sub-module adds two-way federation: the site 
 - Stores incoming posts from followed accounts in a local feed
 - Feed posts are updated or removed when the remote account edits or deletes them
 - Unfollow sends a signed `Undo Follow` activity and removes the account's posts from the local feed
+- **Pause / Resume** — pause a followed account to temporarily stop receiving their posts without losing the record; resume re-sends a `Follow` and resumes delivery
+- **Boosts** — optionally include boosted posts in the local feed (configurable globally)
+- **Feed block** — a "Fediverse Following Feed" block for placement in Backdrop layouts
 
 ### Configuration
 
@@ -201,8 +204,26 @@ Two additional tabs appear at `admin/config/services/fediverse` when the sub-mod
 
 | Tab | Purpose |
 |---|---|
-| Following | Manage followed accounts; send new Follow requests |
-| Feed | Browse posts received from followed accounts |
+| Following | Manage followed accounts; follow, pause, resume, or unfollow |
+| Feed | Browse posts received from followed accounts (paginated) |
+
+Feed settings (retention period, boost inclusion) are on the Following tab.
+
+### Fediverse Following Feed Block
+
+A **Fediverse Following Feed** block is available for placement in any Backdrop layout region. Each block instance has its own settings:
+
+| Setting | Description |
+|---|---|
+| Number of posts | How many recent posts to display (5, 10, 15, 20, 25, or 50) |
+| Show avatars | Display the poster's avatar next to each post |
+| Truncate content | Optionally truncate post text (no limit, 140, 280, or 500 characters) |
+| Max image width / height | Cap the size of inline images (100–400 px) |
+
+- Content is sanitized with `filter_xss` at ingest time and output directly in the block
+- Hashtag links are converted to plain text; regular hyperlinks are preserved
+- Boosts show the booster's name and avatar alongside the original post
+- A "View all posts" link at the bottom of the block links to the admin feed page
 
 ### How It Works
 
@@ -213,6 +234,7 @@ Two additional tabs appear at `admin/config/services/fediverse` when the sub-mod
 5. On `Accept`, the follow status is updated and the remote server begins delivering posts
 6. Incoming `Create` activities from followed accounts are stored in `backdrop_federation_feed`
 7. `Update` and `Delete` activities from followed accounts update or remove the stored posts
+8. `Announce` (boost) activities optionally add the boosted post to the feed; `Undo Announce` removes it
 
 ### Developer Hook
 
@@ -279,7 +301,6 @@ The following are standard or commonly expected ActivityPub features not current
 
 **Missing Follow sub-module features**
 - **Public feed page** — the feed is currently admin-only; a configurable public-facing page would allow site visitors to see followed accounts' posts
-- **Feed block** — a block showing recent posts from followed accounts for placement in layouts
 
 ---
 
