@@ -161,7 +161,14 @@ function backdrop_federation_verify_signature() {
     return TRUE;
   }
   elseif ($result === 0) {
-    watchdog('backdrop_federation', 'Signature verification failed.', array(), WATCHDOG_WARNING);
+    // Temporary diagnostic logging — remove after root cause is identified.
+    watchdog('backdrop_federation', 'Signature verification failed. keyId=@keyid | headers=@headers | HTTP_HOST=@host | REQUEST_URI=@uri | signing_string=@signing', array(
+      '@keyid'   => $params['keyId'],
+      '@headers' => $params['headers'],
+      '@host'    => isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '(missing)',
+      '@uri'     => isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '(missing)',
+      '@signing' => $signing_string,
+    ), WATCHDOG_WARNING);
     return FALSE;
   }
   else {
