@@ -6,6 +6,30 @@ The core module implements an **outbound publisher** model: the site acts as an 
 
 ---
 
+## Status
+
+We have installed and tested the module under limited server conditions. Other than the issues reported in the issue queue, we expect that everything is working. However, this module needs additional testing and feedback. 
+
+- We would really appreciate some feedback on the user interface.
+- Blocking features really needs testing.
+- We anticipate some people may experience problems depending upon server configuration. Let us know about your experiences.
+
+---
+
+## Limitations
+
+This module federates a content-publishing site rather than running a social network, which shapes what it can and cannot do.
+                                                                                              
+The most significant constraint is the single-actor model — the entire site presents itself as one identity, so individual authors have no Fediverse presence of their own. Only a subset of ActivityPub's activity vocabulary is supported: the site cannot originate likes, boosts, or replies, and outgoing posts lack hashtag and mention metadata, limiting their discoverability on remote servers. Everything published is effectively public, with no support for followers-only, unlisted, or direct-message visibility.
+
+Posts received from followed accounts are displayed more plainly than in a native Fediverse client. Inline images are rendered, but link previews and OpenGraph images are not fetched, so posts that depend on a rich preview card will appear as bare text links.
+
+Finally, delivery is best-effort rather than guaranteed — if a remote inbox is down at publish time and cron misses it, the post is not delivered.
+
+For a site whose primary purpose is publishing content to an audience that includes Fediverse users, these are reasonable trade-offs. For anything resembling a social platform, they would be fundamental gaps.
+
+---
+
 ## Installation
 
 Install this module using the official Backdrop CMS instructions. Bugs and feature requests should be reported in the Issue Queue.
