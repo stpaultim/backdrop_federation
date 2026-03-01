@@ -129,7 +129,7 @@ function backdrop_federation_admin_settings_form($form, &$form_state) {
       $default = isset($field_mapping[$type]) ? $field_mapping[$type] : (isset($text_fields['body']) ? 'body' : key($text_fields));
       $form['content']['per_type'][$type]['field'] = array(
         '#type' => 'select',
-        '#title' => t('Body field'),
+        '#title' => t('Field to use for content'),
         '#description' => t('Field used as the post body when federating this content type.'),
         '#options' => $text_fields,
         '#default_value' => $default,
