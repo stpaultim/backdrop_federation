@@ -6,7 +6,7 @@ type = module
 
 configure = admin/config/services/fediverse
 
-dependencies[] = node
+dependencies[] = comment
 
 ; Files
 files[] = backdrop_federation.module
