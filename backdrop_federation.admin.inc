@@ -722,9 +722,9 @@ function backdrop_federation_admin_outbox_page() {
   }
 
   $rows = db_select('backdrop_federation_outbox', 'o')
+    ->extend('PagerDefault')
     ->fields('o', array('id', 'activity_type', 'object_type', 'nid', 'activity_id', 'created'))
     ->orderBy('id', 'DESC')
-    ->extend('PagerDefault')
     ->limit(20)
     ->execute();
 
