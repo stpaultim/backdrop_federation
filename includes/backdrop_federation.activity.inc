@@ -19,7 +19,10 @@ function backdrop_federation_build_activity(Node $node, $type) {
   global $base_url;
 
   $actor_uri = backdrop_federation_get_actor_uri();
-  $node_url = url('node/' . $node->nid, array('absolute' => TRUE));
+  // Use the canonical node path, not url(), which would apply URL aliases.
+  // The Note id must be stable across edits; an alias change would cause
+  // remote servers to treat the Update as a brand-new post.
+  $node_url = $base_url . '/node/' . $node->nid;
 
   // Generate a unique activity ID.
   $activity_id = $base_url . '/fediverse/activity/' . $node->nid . '/' . strtolower($type) . '/' . REQUEST_TIME;
@@ -62,7 +65,7 @@ function _backdrop_federation_build_object(Node $node) {
   global $base_url;
 
   $actor_uri = backdrop_federation_get_actor_uri();
-  $node_url = url('node/' . $node->nid, array('absolute' => TRUE));
+  $node_url = $base_url . '/node/' . $node->nid;
 
   // Determine object type from per-content-type config, defaulting to Note.
   $object_type_mapping = config_get('backdrop_federation.settings', 'object_type_mapping') ?: array();
