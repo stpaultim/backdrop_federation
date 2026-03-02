@@ -409,7 +409,10 @@ function backdrop_federation_node_update(Node $node) {
 
   if ($node->status == NODE_PUBLISHED && _backdrop_federation_type_enabled($node->type)) {
     module_load_include('inc', 'backdrop_federation', 'includes/backdrop_federation.activity');
-    _backdrop_federation_queue_activity($node, 'Update');
+    // Send Create when transitioning from unpublished (first publish or
+    // re-publish after a Delete), since the remote has no copy to update.
+    $activity_type = ($node->original->status == NODE_PUBLISHED) ? 'Update' : 'Create';
+    _backdrop_federation_queue_activity($node, $activity_type);
     _backdrop_federation_deliver_queue_now();
   }
   elseif ($node->original->status == NODE_PUBLISHED && $node->status == NODE_NOT_PUBLISHED && _backdrop_federation_type_enabled($node->type)) {
