@@ -413,9 +413,114 @@ function _backdrop_federation_generate_keypair() {
 }
 
 /**
+ * Add backdrop_federation_received table for tracking incoming replies as comments.
+ */
+function backdrop_federation_update_1000() {
+  if (!db_table_exists('backdrop_federation_received')) {
+    $schema = array(
+      'description' => 'Tracks incoming ActivityPub objects saved as Backdrop comments.',
+      'fields' => array(
+        'id' => array(
+          'description' => 'Primary key.',
+          'type' => 'serial',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+        ),
+        'object_id' => array(
+          'description' => 'ActivityPub object URI (unique).',
+          'type' => 'varchar',
+          'length' => 2048,
+          'not null' => TRUE,
+        ),
+        'cid' => array(
+          'description' => 'Backdrop comment ID.',
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'default' => 0,
+        ),
+        'nid' => array(
+          'description' => 'Node ID the comment belongs to.',
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'default' => 0,
+        ),
+        'created' => array(
+          'description' => 'Timestamp when the record was created.',
+          'type' => 'int',
+          'not null' => TRUE,
+          'default' => 0,
+        ),
+      ),
+      'primary key' => array('id'),
+      'unique keys' => array(
+        'object_id' => array(array('object_id', 255)),
+      ),
+      'indexes' => array(
+        'cid' => array('cid'),
+        'nid' => array('nid'),
+      ),
+    );
+    db_create_table('backdrop_federation_received', $schema);
+  }
+}
+
+/**
+ * Add backdrop_federation_reactions table for Like and Announce counts.
+ */
+function backdrop_federation_update_1001() {
+  if (!db_table_exists('backdrop_federation_reactions')) {
+    $schema = array(
+      'description' => 'Stores Like and Announce reactions from fediverse actors.',
+      'fields' => array(
+        'id' => array(
+          'description' => 'Primary key.',
+          'type' => 'serial',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+        ),
+        'nid' => array(
+          'description' => 'Node ID.',
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+        ),
+        'actor_uri' => array(
+          'description' => 'Actor who reacted.',
+          'type' => 'varchar',
+          'length' => 2048,
+          'not null' => TRUE,
+        ),
+        'type' => array(
+          'description' => 'Reaction type: Like or Announce.',
+          'type' => 'varchar',
+          'length' => 32,
+          'not null' => TRUE,
+        ),
+        'created' => array(
+          'description' => 'Timestamp when reaction was recorded.',
+          'type' => 'int',
+          'not null' => TRUE,
+          'default' => 0,
+        ),
+      ),
+      'primary key' => array('id'),
+      'unique keys' => array(
+        'nid_actor_type' => array('nid', array('actor_uri', 255), 'type'),
+      ),
+      'indexes' => array(
+        'nid' => array('nid'),
+      ),
+    );
+    db_create_table('backdrop_federation_reactions', $schema);
+  }
+}
+
+/**
  * Add backdrop_federation_blocklist and backdrop_federation_rate_limit tables for anti-abuse.
  */
-function backdrop_federation_update_7003() {
+function backdrop_federation_update_1002() {
   if (!db_table_exists('backdrop_federation_blocklist')) {
     $schema = array(
       'description' => 'Stores blocked actors and domains for the fediverse inbox.',
@@ -498,110 +603,5 @@ function backdrop_federation_update_7003() {
       ),
     );
     db_create_table('backdrop_federation_rate_limit', $schema);
-  }
-}
-
-/**
- * Add backdrop_federation_reactions table for Like and Announce counts.
- */
-function backdrop_federation_update_7002() {
-  if (!db_table_exists('backdrop_federation_reactions')) {
-    $schema = array(
-      'description' => 'Stores Like and Announce reactions from fediverse actors.',
-      'fields' => array(
-        'id' => array(
-          'description' => 'Primary key.',
-          'type' => 'serial',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-        ),
-        'nid' => array(
-          'description' => 'Node ID.',
-          'type' => 'int',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-        ),
-        'actor_uri' => array(
-          'description' => 'Actor who reacted.',
-          'type' => 'varchar',
-          'length' => 2048,
-          'not null' => TRUE,
-        ),
-        'type' => array(
-          'description' => 'Reaction type: Like or Announce.',
-          'type' => 'varchar',
-          'length' => 32,
-          'not null' => TRUE,
-        ),
-        'created' => array(
-          'description' => 'Timestamp when reaction was recorded.',
-          'type' => 'int',
-          'not null' => TRUE,
-          'default' => 0,
-        ),
-      ),
-      'primary key' => array('id'),
-      'unique keys' => array(
-        'nid_actor_type' => array('nid', array('actor_uri', 255), 'type'),
-      ),
-      'indexes' => array(
-        'nid' => array('nid'),
-      ),
-    );
-    db_create_table('backdrop_federation_reactions', $schema);
-  }
-}
-
-/**
- * Add backdrop_federation_received table for tracking incoming replies as comments.
- */
-function backdrop_federation_update_7001() {
-  if (!db_table_exists('backdrop_federation_received')) {
-    $schema = array(
-      'description' => 'Tracks incoming ActivityPub objects saved as Backdrop comments.',
-      'fields' => array(
-        'id' => array(
-          'description' => 'Primary key.',
-          'type' => 'serial',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-        ),
-        'object_id' => array(
-          'description' => 'ActivityPub object URI (unique).',
-          'type' => 'varchar',
-          'length' => 2048,
-          'not null' => TRUE,
-        ),
-        'cid' => array(
-          'description' => 'Backdrop comment ID.',
-          'type' => 'int',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-          'default' => 0,
-        ),
-        'nid' => array(
-          'description' => 'Node ID the comment belongs to.',
-          'type' => 'int',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-          'default' => 0,
-        ),
-        'created' => array(
-          'description' => 'Timestamp when the record was created.',
-          'type' => 'int',
-          'not null' => TRUE,
-          'default' => 0,
-        ),
-      ),
-      'primary key' => array('id'),
-      'unique keys' => array(
-        'object_id' => array(array('object_id', 255)),
-      ),
-      'indexes' => array(
-        'cid' => array('cid'),
-        'nid' => array('nid'),
-      ),
-    );
-    db_create_table('backdrop_federation_received', $schema);
   }
 }
