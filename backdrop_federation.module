@@ -84,6 +84,16 @@ function backdrop_federation_menu() {
     'weight' => 8,
   );
 
+  // Clear outbox confirm page.
+  $items['admin/config/services/fediverse/outbox/clear'] = array(
+    'title' => 'Clear outbox',
+    'page callback' => 'backdrop_get_form',
+    'page arguments' => array('backdrop_federation_admin_outbox_clear_confirm'),
+    'access arguments' => array('administer backdrop_federation'),
+    'file' => 'backdrop_federation.admin.inc',
+    'type' => MENU_CALLBACK,
+  );
+
   // Outbox raw JSON view.
   $items['admin/config/services/fediverse/outbox/%/json'] = array(
     'title' => 'View activity JSON',
@@ -404,6 +414,23 @@ function backdrop_federation_node_update(Node $node) {
   }
   elseif ($node->original->status == NODE_PUBLISHED && $node->status == NODE_NOT_PUBLISHED && _backdrop_federation_type_enabled($node->type)) {
     // Node was unpublished.
+    module_load_include('inc', 'backdrop_federation', 'includes/backdrop_federation.activity');
+    _backdrop_federation_queue_activity($node, 'Delete');
+    _backdrop_federation_deliver_queue_now();
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function backdrop_federation_node_delete(Node $node) {
+  if (!config_get('backdrop_federation.settings', 'enabled')) {
+    return;
+  }
+
+  // Only send Delete if the node was published (unpublished nodes already sent
+  // a Delete via hook_node_update, and draft nodes were never announced).
+  if ($node->status == NODE_PUBLISHED && _backdrop_federation_type_enabled($node->type)) {
     module_load_include('inc', 'backdrop_federation', 'includes/backdrop_federation.activity');
     _backdrop_federation_queue_activity($node, 'Delete');
     _backdrop_federation_deliver_queue_now();

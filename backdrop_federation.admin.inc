@@ -129,7 +129,7 @@ function backdrop_federation_admin_settings_form($form, &$form_state) {
       $default = isset($field_mapping[$type]) ? $field_mapping[$type] : (isset($text_fields['body']) ? 'body' : key($text_fields));
       $form['content']['per_type'][$type]['field'] = array(
         '#type' => 'select',
-        '#title' => t('Body field'),
+        '#title' => t('Field to use for content'),
         '#description' => t('Field used as the post body when federating this content type.'),
         '#options' => $text_fields,
         '#default_value' => $default,
@@ -724,7 +724,8 @@ function backdrop_federation_admin_outbox_page() {
   $rows = db_select('backdrop_federation_outbox', 'o')
     ->fields('o', array('id', 'activity_type', 'object_type', 'nid', 'activity_id', 'created'))
     ->orderBy('id', 'DESC')
-    ->range(0, 50)
+    ->extend('PagerDefault')
+    ->limit(20)
     ->execute();
 
   $header = array(t('ID'), t('Type'), t('Object'), t('Node'), t('Activity URI'), t('Created'), t('JSON'));
@@ -745,12 +746,47 @@ function backdrop_federation_admin_outbox_page() {
   }
 
   $output .= theme('table', array('header' => $header, 'rows' => $table_rows));
-
-  if ($total > 50) {
-    $output .= '<p>' . t('Showing most recent 50 of @total activities.', array('@total' => $total)) . '</p>';
-  }
+  $output .= theme('pager');
+  $output .= '<p style="text-align: right">' . l(t('Clear outbox'), 'admin/config/services/fediverse/outbox/clear') . '</p>';
 
   return $output;
+}
+
+/**
+ * Confirm form for clearing all outbox entries.
+ */
+function backdrop_federation_admin_outbox_clear_confirm($form, &$form_state) {
+  $total = db_select('backdrop_federation_outbox', 'o')
+    ->countQuery()
+    ->execute()
+    ->fetchField();
+
+  return confirm_form(
+    $form,
+    t('Clear the outbox?'),
+    'admin/config/services/fediverse/outbox',
+    format_plural(
+      $total,
+      'This will permanently delete 1 activity record. The Re-deliver button will no longer work until new content is published. This does not affect content on your site or on remote servers.',
+      'This will permanently delete @count activity records. The Re-deliver button will no longer work until new content is published. This does not affect content on your site or on remote servers.'
+    ),
+    t('Clear outbox'),
+    t('Cancel')
+  );
+}
+
+/**
+ * Submit handler for the clear outbox confirm form.
+ */
+function backdrop_federation_admin_outbox_clear_confirm_submit($form, &$form_state) {
+  $deleted = db_delete('backdrop_federation_outbox')->execute();
+  backdrop_set_message(format_plural(
+    $deleted,
+    'Outbox cleared: 1 activity deleted.',
+    'Outbox cleared: @count activities deleted.'
+  ));
+  watchdog('backdrop_federation', 'Outbox cleared by admin: @count activities deleted.', array('@count' => $deleted), WATCHDOG_INFO);
+  $form_state['redirect'] = 'admin/config/services/fediverse/outbox';
 }
 
 /**
