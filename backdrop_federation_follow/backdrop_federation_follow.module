@@ -719,6 +719,30 @@ function backdrop_federation_follow_block_save($delta = '', $edit = array()) {
 }
 
 /**
+ * Extract a usable URL string from an ActivityPub 'url' value.
+ *
+ * The 'url' field in ActivityPub can be a plain string or an array of
+ * Link objects (e.g. [{"type":"Link","href":"https://..."}]). This helper
+ * returns a string URL or NULL if one cannot be found.
+ */
+function _backdrop_federation_follow_extract_url($value) {
+  if (is_string($value)) {
+    return $value;
+  }
+  if (is_array($value)) {
+    foreach ($value as $link) {
+      if (is_string($link)) {
+        return $link;
+      }
+      if (is_array($link) && isset($link['href']) && is_string($link['href'])) {
+        return $link['href'];
+      }
+    }
+  }
+  return NULL;
+}
+
+/**
  * Implements hook_block_view().
  */
 function backdrop_federation_follow_block_view($delta = '', $settings = array(), $contexts = array()) {
@@ -770,7 +794,9 @@ function backdrop_federation_follow_block_view($delta = '', $settings = array(),
     $display_name = $account ? check_plain($account->display_name) : check_plain($row->actor_uri);
 
     $object       = json_decode($row->object_json, TRUE);
-    $original_url = isset($object['url']) ? $object['url'] : (isset($object['id']) ? $object['id'] : NULL);
+    $original_url = _backdrop_federation_follow_extract_url(
+      isset($object['url']) ? $object['url'] : (isset($object['id']) ? $object['id'] : NULL)
+    );
 
     // The stored content was already sanitized via filter_xss() at ingest time,
     // so it is safe to output as HTML — links, formatting, and mentions are

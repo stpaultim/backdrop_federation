@@ -541,7 +541,9 @@ function backdrop_federation_follow_admin_feed_page() {
     $display_name = $account ? check_plain($account->display_name) : check_plain($row->actor_uri);
 
     $object = json_decode($row->object_json, TRUE);
-    $original_url = isset($object['url']) ? $object['url'] : (isset($object['id']) ? $object['id'] : NULL);
+    $original_url = _backdrop_federation_follow_extract_url(
+      isset($object['url']) ? $object['url'] : (isset($object['id']) ? $object['id'] : NULL)
+    );
 
     $boost_line = '';
     if ($row->activity_type === 'Announce') {
