@@ -83,13 +83,12 @@ function _backdrop_federation_build_object(Node $node) {
     $body = check_markup($body, $format);
   }
 
-  // Build summary from teaser or truncate body.
+  // Only include summary if explicitly set by the author. In ActivityPub,
+  // Mastodon treats summary as a Content Warning — auto-generating one from
+  // body truncation would hide every long post behind a "Show More" button.
   $summary = '';
   if (!empty($node->{$text_field}[LANGUAGE_NONE][0]['summary'])) {
     $summary = check_plain($node->{$text_field}[LANGUAGE_NONE][0]['summary']);
-  }
-  elseif (strlen(strip_tags($body)) > 500) {
-    $summary = truncate_utf8(strip_tags($body), 500, TRUE, TRUE);
   }
 
   $object = array(
