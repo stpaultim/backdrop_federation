@@ -512,9 +512,9 @@ function backdrop_federation_follow_admin_feed_page() {
   }
 
   $rows = db_select('backdrop_federation_feed', 'f')
+    ->extend('PagerDefault')
     ->fields('f')
     ->orderBy('published', 'DESC')
-    ->extend('PagerDefault')
     ->limit(20)
     ->execute()
     ->fetchAll();
