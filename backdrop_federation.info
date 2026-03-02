@@ -7,10 +7,3 @@ type = module
 configure = admin/config/services/fediverse
 
 dependencies[] = comment
-
-; Files
-files[] = backdrop_federation.module
-files[] = backdrop_federation.admin.inc
-files[] = backdrop_federation.pages.inc
-files[] = includes/backdrop_federation.http_signature.inc
-files[] = includes/backdrop_federation.activity.inc
